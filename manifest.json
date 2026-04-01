@@ -44,9 +44,6 @@
     "https://*/",
     "file://*/*"
   ],
-  "optional_host_permissions": [
-    "https://translate.google.com/"
-  ],
   "cross_origin_opener_policy": {
     "value": "same-origin"
   },

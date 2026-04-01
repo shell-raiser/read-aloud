@@ -116,14 +116,13 @@
 
   async function setupInPageHighlightingMvp() {
     const mode = Number(await getSetting("showHighlighting") || defaults.showHighlighting)
-    console.log("Read Aloud page highlighting setup", {mode, href: location.href})
     if (mode !== 3) return
 
     const ui = createInPageHighlightUi()
     ui.show()
     let active = false
 
-    setInterval(async () => {
+    const timerId = setInterval(async () => {
       try {
         const latestMode = Number(await getSetting("showHighlighting") || defaults.showHighlighting)
         if (latestMode !== 3) {
@@ -134,11 +133,6 @@
         const stateInfo = await sendToPlayer({method: "getPlaybackState"})
         const state = stateInfo && stateInfo.state
         const speech = stateInfo && stateInfo.speechInfo
-        console.log("Read Aloud page highlighting poll", {
-          state,
-          hasSpeech: !!speech,
-          textCount: speech && speech.texts ? speech.texts.length : 0
-        })
         const isActive = ["LOADING", "PLAYING", "PAUSED"].includes(state) && speech
         if (!isActive) {
           if (state == "STOPPED") {
@@ -157,6 +151,11 @@
         ui.render(state, speech)
       }
       catch (err) {
+        if (isExtensionContextInvalidated(err)) {
+          clearInterval(timerId)
+          ui.hide()
+          return
+        }
         console.error("Read Aloud page highlighting failed", err)
         ui.clear()
         active = false
@@ -165,7 +164,6 @@
   }
 
   function createInPageHighlightUi() {
-    console.log("Read Aloud page highlighting create UI")
     const toolbarHeight = 44
     const root = $("<div>")
       .attr("id", "readaloud-page-highlight-root")
@@ -638,12 +636,10 @@
 
     const ui = {
       show() {
-        console.log("Read Aloud page highlighting show root")
         root.show()
         layer.show()
       },
       hide() {
-        console.log("Read Aloud page highlighting hide root")
         layer.empty()
         layer.hide()
         root.hide()
@@ -677,6 +673,10 @@ function getInnerText(elem) {
 
 function addMissingPunctuationForHighlighting(text) {
   return (text || "").replace(/(\w)(\s*?\r?\n)/g, "$1.$2");
+}
+
+function isExtensionContextInvalidated(err) {
+  return !!(err && err.message && /Extension context invalidated/i.test(err.message));
 }
 
 function isNotEmpty(text) {

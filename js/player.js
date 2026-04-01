@@ -322,6 +322,7 @@ function handleError(err) {
   if (err) {
     var code = /^{/.test(err.message) ? JSON.parse(err.message).code : err.message;
     if (code == "error_payment_required") clearSettings(["voiceName"]);
+    if (code == "error_no_text") return;
     reportError(err);
   }
 }
