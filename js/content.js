@@ -141,11 +141,18 @@
         })
         const isActive = ["LOADING", "PLAYING", "PAUSED"].includes(state) && speech
         if (!isActive) {
+          if (state == "STOPPED") {
+            ui.resetSession()
+            ui.hide()
+          }
           active = false
           return
         }
 
-        if (!active) ui.show()
+        if (!active) {
+          ui.resetSession()
+          ui.show()
+        }
         active = true
         ui.render(state, speech)
       }
@@ -159,63 +166,104 @@
 
   function createInPageHighlightUi() {
     console.log("Read Aloud page highlighting create UI")
+    const toolbarHeight = 44
     const root = $("<div>")
       .attr("id", "readaloud-page-highlight-root")
       .css({
         position: "fixed",
-        inset: 0,
+        top: "14px",
+        left: "50%",
+        transform: "translateX(-50%)",
         zIndex: 2147483647,
+        display: "none",
         pointerEvents: "none",
-        display: "block",
       })
-      .appendTo(document.body || document.documentElement)
+      .appendTo(document.documentElement)
 
     const toolbar = $("<div>")
       .css({
         pointerEvents: "auto",
-        position: "absolute",
-        top: "16px",
-        left: "50%",
-        transform: "translateX(-50%)",
+        position: "relative",
+        height: toolbarHeight + "px",
         background: "rgba(20, 20, 20, .85)",
         color: "#fff",
+        border: "1px solid rgba(255,255,255,.12)",
         borderRadius: "9999px",
-        padding: "8px 12px",
         display: "flex",
-        gap: "8px",
         alignItems: "center",
+        justifyContent: "center",
+        backdropFilter: "blur(10px)",
+        boxShadow: "0 8px 24px rgba(0,0,0,.22)",
+        padding: "0 8px",
       })
       .appendTo(root)
+
+    let dismissed = false
+
+    const controls = $("<div>")
+      .css({
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "6px",
+      })
+      .appendTo(toolbar)
 
     const makeButton = (text, action) => $("<button>")
       .text(text)
       .css({
         border: 0,
         borderRadius: "9999px",
-        padding: "6px 10px",
+        minWidth: "36px",
+        height: "32px",
+        padding: "0 12px",
         background: "rgba(255,255,255,.16)",
         color: "#fff",
         cursor: "pointer",
+        fontSize: "13px",
       })
       .on("click", action)
-      .appendTo(toolbar)
+      .appendTo(controls)
 
+    makeButton("⏮", () => sendToPlayer({method: "rewind"}))
     const playPauseButton = makeButton("Pause", async () => {
       const {state} = await sendToPlayer({method: "getPlaybackState"})
       if (state == "PLAYING" || state == "LOADING") await sendToPlayer({method: "pause"})
       else await sendToPlayer({method: "resume"})
     })
-    makeButton("⏮", () => sendToPlayer({method: "rewind"}))
     makeButton("⏭", () => sendToPlayer({method: "forward"}))
-    makeButton("Stop", () => sendToPlayer({method: "stop"}))
+
+    $("<button>")
+      .text("✕")
+      .css({
+        width: "32px",
+        height: "32px",
+        border: 0,
+        borderRadius: "9999px",
+        background: "rgba(255,255,255,.16)",
+        color: "#fff",
+        cursor: "pointer",
+        fontSize: "16px",
+        lineHeight: 1,
+        marginLeft: "6px",
+      })
+      .on("click", async () => {
+        dismissed = true
+        ui.hide()
+        await sendToPlayer({method: "stop"})
+      })
+      .appendTo(controls)
 
     const layer = $("<div>")
+      .attr("id", "readaloud-page-highlight-layer")
       .css({
-        position: "absolute",
+        position: "fixed",
         inset: 0,
         overflow: "hidden",
+        pointerEvents: "none",
+        zIndex: 2147483646,
       })
-      .appendTo(root)
+      .appendTo(document.body || document.documentElement)
 
     let lastMatchKey = null
     let lastMatchedElement = null
@@ -224,7 +272,7 @@
     let cacheTime = 0
 
     $(window).on("scroll resize", () => {
-      if (root.is(":visible")) renderHighlights()
+      if (toolbar.is(":visible")) renderHighlights()
     })
 
     function refreshPageMap(force) {
@@ -523,7 +571,7 @@
 
     function scrollIntoView(elem) {
       const rect = elem.getBoundingClientRect()
-      if (rect.top >= 100 && rect.bottom <= window.innerHeight - 32) return
+      if (rect.top >= 70 && rect.bottom <= window.innerHeight - 24) return
       elem.scrollIntoView({
         behavior: "smooth",
         block: "center",
@@ -577,20 +625,27 @@
     }
 
     function render(state, speech) {
+      if (state == "STOPPED") {
+        ui.hide()
+        return
+      }
+      if (dismissed) return
       playPauseButton.text(state == "PAUSED" ? "Play" : "Pause")
       currentState = state
       currentSpeech = speech
       renderHighlights()
     }
 
-    return {
+    const ui = {
       show() {
         console.log("Read Aloud page highlighting show root")
         root.show()
+        layer.show()
       },
       hide() {
         console.log("Read Aloud page highlighting hide root")
         layer.empty()
+        layer.hide()
         root.hide()
         currentState = null
         currentSpeech = null
@@ -598,8 +653,15 @@
       clear() {
         layer.empty()
       },
+      resetSession() {
+        dismissed = false
+        lastMatchKey = null
+        lastMatchedElement = null
+        lastGlobalStart = 0
+      },
       render
     }
+    return ui
   }
 })()
 
