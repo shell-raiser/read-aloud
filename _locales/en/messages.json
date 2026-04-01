@@ -65,6 +65,9 @@
   "options_highlighting_window": {
     "message": "Show in a separate window"
   },
+  "options_highlighting_page": {
+    "message": "Show in page itself (MVP)"
+  },
   "options_audio_playback": {
     "message": "Audio Playback"
   },

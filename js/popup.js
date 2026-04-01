@@ -170,7 +170,7 @@ async function updateButtons() {
   $("#btnStop").toggle(state == "PAUSED" || state == "PLAYING" || state == "LOADING");
   $("#btnForward, #btnRewind").toggle(state == "PLAYING" || state == "PAUSED");
 
-  if (showHighlighting && (state == "LOADING" || state == "PAUSED" || state == "PLAYING") && speech) {
+  if ((showHighlighting == 1 || showHighlighting == 2) && (state == "LOADING" || state == "PAUSED" || state == "PLAYING") && speech) {
     $("#highlight, #toolbar").show()
     updateHighlighting(speech)
   }
