@@ -35,6 +35,7 @@ var handlers = {
   updateColorScheme,
   updateActionPopupState,
   updatePlaybackRate,
+  manageNghiTtsVoices,
 }
 
 registerMessageListener("serviceWorker", handlers)
@@ -513,6 +514,15 @@ async function manageSupertonicVoices() {
   }
 }
 
+async function manageNghiTtsVoices() {
+  const result = await sendToPlayer({method: "manageNghiTtsVoices"}).catch(err => false)
+  if (result != "OK") {
+    if (result == "POPOUT") await sendToPlayer({method: "close"})
+    await injectPlayer()
+    await sendToPlayer({method: "manageNghiTtsVoices"})
+  }
+}
+
 
 
 async function contentScriptAlreadyInjected(tab, frameId) {
@@ -554,12 +564,13 @@ async function injectContentScript(tab, frameId, extraScripts) {
 }
 
 async function injectPlayer(tab) {
-  const settings = await getSettings(["useEmbeddedPlayer", "piperVoices", "supertonicVoices"])
+  const settings = await getSettings(["useEmbeddedPlayer", "piperVoices", "supertonicVoices", "nghiTtsVoices"])
   const promise = new Promise(f => handlers.playerCheckIn = f)
   if (tab && settings.useEmbeddedPlayer
-    //don't use embedded player if there are Piper or Supertonic voices installed
+    //don't use embedded player if there are hosted tool voices installed
     && (settings.piperVoices || []).length == 0
     && (settings.supertonicVoices || []).length == 0
+    && (settings.nghiTtsVoices || []).length == 0
   ) {
     try {
       if (tab.incognito) {
@@ -594,7 +605,7 @@ function createPlayerFrame() {
 
 async function createPlayerTab() {
   const tab = await brapi.tabs.create({
-    url: brapi.runtime.getURL("player.html?autoclose"),
+    url: "player.html?autoclose",
     index: 0,
     active: false,
   })

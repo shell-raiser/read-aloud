@@ -27,6 +27,7 @@ function Speech(texts, options) {
   function pickEngine() {
     if (isPiperVoice(options.voice)) return piperTtsEngine;
     if (isSupertonicVoice(options.voice)) return supertonicTtsEngine;
+    if (isNghiTtsVoice(options.voice)) return nghiTtsEngine;
     if (isAzure(options.voice)) return azureTtsEngine;
     if (isOpenai(options.voice)) return openaiTtsEngine;
     if (isUseMyPhone(options.voice)) return phoneTtsEngine;
@@ -53,7 +54,7 @@ function Speech(texts, options) {
     }
     else {
       if (isGoogleTranslate(options.voice)) return new CharBreaker(200, punctuator).breakText(text);
-      else if (isPiperVoice(options.voice) || isSupertonicVoice(options.voice)) return [text];
+      else if (isPiperVoice(options.voice) || isSupertonicVoice(options.voice) || isNghiTtsVoice(options.voice)) return [text];
       else return new CharBreaker(750, punctuator, 200).breakText(text);
     }
   }
@@ -77,6 +78,7 @@ function Speech(texts, options) {
         switch (engine) {
           case piperTtsEngine: return 'Piper'
           case supertonicTtsEngine: return 'Supertonic'
+          case nghiTtsEngine: return 'NghiTTS'
         }
       })
     }
@@ -395,11 +397,12 @@ function Speech(texts, options) {
   }
 
   function LatinPunctuator() {
+    var nonSentenceEndingAbbrev = /\b(?:[A-Za-z]|Adm|Assn|Ave|Blvd|Bldg|Brig|Capt|Cmdr|Col|Comdr|Corp|Cpl|Ct|Dept|Dr|Drs|Fig|Figs|Fr|Ft|Gen|Gov|Hon|Inc|Jr|Lieut|Ln|Lt|Ltd|Maj|Messrs|Mmes|Mr|Mrs|Ms|Mt|Mx|No|Nos|Pl|Pres|Prof|Rd|Rep|Reps|Rev|Sen|Sens|Sgt|Sr|St|Ste|Univ|Jan|Feb|Mar|Apr|Aug|Sep|Sept|Oct|Nov|Dec|dept|ed|eds|est|fig|figs|misc|pp|ref|refs|vol|vols|vs)\.\s+$/;
     this.getParagraphs = function(text) {
       return recombine(text.split(/((?:\r?\n\s*){2,})/));
     }
     this.getSentences = function(text) {
-      return recombine(text.split(/([.!?]+[\s\u200b]+)/), /\b(\w|[A-Z][a-z]|Assn|Ave|Capt|Col|Comdr|Corp|Cpl|Gen|Gov|Hon|Inc|Lieut|Ltd|Rev|Univ|Jan|Feb|Mar|Apr|Aug|Sept|Oct|Nov|Dec|dept|ed|est|vol|vs)\.\s+$/);
+      return recombine(text.split(/([.!?]+[\s\u200b]+)/), nonSentenceEndingAbbrev);
     }
     this.getPhrases = function(sentence) {
       return recombine(sentence.split(/([,;:]\s+|\s-+\s+|—\s*)/));
