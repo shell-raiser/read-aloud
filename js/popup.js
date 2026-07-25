@@ -23,6 +23,22 @@ $(function() {
   else getCurrentTab().then(function(currentTab) {return updateSettings({readAloudTab: currentTab.id})})
 })
 
+rxjs.combineLatest([
+  observeSetting("voiceName"),
+  domReady()
+]).pipe(
+  rxjs.switchMap(([voiceName]) =>
+    rxjs.combineLatest([
+      rxjs.of(voiceName),
+      observeSetting("rate" + (voiceName || ""))
+    ])
+  )
+).subscribe(([voiceName, rate]) => {
+  $("#rate-value")
+    .text(formatRate(rate || defaults.rate))
+    .data("voiceName", voiceName || "")
+})
+
 
 
 getSettings(["showHighlighting", "readAloudTab"]).then(async settings => {
@@ -65,6 +81,8 @@ async function init() {
   $("#btnRewind").click(onRewind);
   $("#decrease-font-size").click(changeFontSize.bind(null, -1));
   $("#increase-font-size").click(changeFontSize.bind(null, +1));
+  $("#decrease-rate").click(changeRate.bind(null, -1));
+  $("#increase-rate").click(changeRate.bind(null, +1));
   $("#decrease-window-size").click(changeWindowSize.bind(null, -1));
   $("#increase-window-size").click(changeWindowSize.bind(null, +1));
   $("#toggle-dark-mode").click(toggleDarkMode);
@@ -329,6 +347,18 @@ function changeWindowSize(delta) {
     .catch(handleError)
 }
 
+function changeRate(direction) {
+  const voiceName = $("#rate-value").data("voiceName") || ""
+  const settingName = "rate" + voiceName
+  getSetting(settingName)
+    .then(currentRate => {
+      const nextRate = getNextRate(currentRate || defaults.rate, direction)
+      return updateSetting(settingName, nextRate)
+        .then(() => bgPageInvoke("updatePlaybackRate"))
+    })
+    .catch(handleError)
+}
+
 function refreshSize() {
   return getSettings(["highlightFontSize", "highlightWindowSize"])
     .then(function(settings) {
@@ -407,4 +437,21 @@ function showAnnouncement(ann) {
 function toggleDarkMode() {
   const darkMode = document.body.classList.toggle("dark-mode")
   updateSettings({darkMode})
+}
+
+function getNextRate(currentRate, direction) {
+  const delta = getRateStep(currentRate)
+  const nextRate = currentRate + (delta * direction)
+  return Number(Math.min(10, Math.max(.1, nextRate)).toFixed(2))
+}
+
+function getRateStep(rate) {
+  if (rate < 1) return .1
+  if (rate < 2) return .25
+  if (rate < 4) return .5
+  return 1
+}
+
+function formatRate(rate) {
+  return `${rate.toFixed(rate < 1 ? 2 : 1).replace(/\.0$/, "")}x`
 }

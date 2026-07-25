@@ -1,13 +1,25 @@
 
 (function() {
+  const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
+
   registerMessageListener("offscreen", {
     play: play,
     pause: pause,
     resume: resume,
+    getColorScheme: getColorScheme,
   })
 
   sendToPlayer({method: "offscreenCheckIn"})
     .catch(console.error)
+  sendToServiceWorker({method: "updateColorScheme", args: [getColorScheme()]})
+    .catch(console.error)
+
+  if (colorSchemeQuery.addEventListener) {
+    colorSchemeQuery.addEventListener("change", handleColorSchemeChange)
+  }
+  else {
+    colorSchemeQuery.addListener(handleColorSchemeChange)
+  }
 
 
 
@@ -50,10 +62,26 @@
     return true
   }
 
+  function getColorScheme() {
+    return colorSchemeQuery.matches ? "dark" : "light"
+  }
+
+  function handleColorSchemeChange() {
+    sendToServiceWorker({method: "updateColorScheme", args: [getColorScheme()]})
+      .catch(console.error)
+  }
+
 
 
   async function sendToPlayer(message) {
     message.dest = "player"
+    const result = await brapi.runtime.sendMessage(message)
+    if (result && result.error) throw result.error
+    else return result
+  }
+
+  async function sendToServiceWorker(message) {
+    message.dest = "serviceWorker"
     const result = await brapi.runtime.sendMessage(message)
     if (result && result.error) throw result.error
     else return result

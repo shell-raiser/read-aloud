@@ -2,7 +2,16 @@
 brapi.runtime.onInstalled.addListener(function() {
   installContentScripts()
   installContextMenus()
+  initActionIconTheme()
+  updateActionPopupState()
 })
+
+if (brapi.runtime.onStartup) {
+  brapi.runtime.onStartup.addListener(function() {
+    initActionIconTheme()
+    updateActionPopupState()
+  })
+}
 
 
 /**
@@ -23,9 +32,27 @@ var handlers = {
   authWavenet: authWavenet,
   managePiperVoices,
   manageSupertonicVoices,
+  updateColorScheme,
+  updateActionPopupState,
+  updatePlaybackRate,
 }
 
 registerMessageListener("serviceWorker", handlers)
+initActionIconTheme()
+updateActionPopupState()
+
+const actionIconPaths = {
+  light: {
+    16: "img/theme/icon-symbolic-dark-16.png",
+    32: "img/theme/icon-symbolic-dark-32.png",
+  },
+  dark: {
+    16: "img/theme/icon-symbolic-light-16.png",
+    32: "img/theme/icon-symbolic-light-32.png",
+  },
+}
+const actionPopupPath = "popup.html?isPopup=1"
+let creatingOffscreenDocument = null
 
 
 /**
@@ -58,6 +85,80 @@ async function installContentScripts() {
   }
 }
 
+async function initActionIconTheme() {
+  if (!brapi.action || !brapi.action.setIcon || !brapi.offscreen) return
+  try {
+    await ensureOffscreenDocument()
+    const colorScheme = await sendToOffscreen({method: "getColorScheme"})
+    await updateColorScheme(colorScheme)
+  }
+  catch (err) {
+    console.error("Failed to initialize action icon theme", err)
+  }
+}
+
+async function updateColorScheme(colorScheme) {
+  const iconSet = actionIconPaths[colorScheme] || actionIconPaths.light
+  await brapi.action.setIcon({path: iconSet})
+  return true
+}
+
+async function updateActionPopupState(stateInfo) {
+  if (!brapi.action || !brapi.action.setPopup) return true
+  const settings = await getSettings(["showHighlighting"])
+  const showHighlighting = Number(settings.showHighlighting != null ? settings.showHighlighting : defaults.showHighlighting)
+  const playbackState = stateInfo ? stateInfo.state : (await getPlaybackState()).state
+  const popup = showHighlighting == 3 && playbackState == "STOPPED" ? "" : actionPopupPath
+  await brapi.action.setPopup({popup})
+  return true
+}
+
+async function ensureOffscreenDocument() {
+  if (await hasOffscreenDocument()) return
+  if (!creatingOffscreenDocument) {
+    creatingOffscreenDocument = brapi.offscreen.createDocument({
+      url: brapi.runtime.getURL("offscreen.html"),
+      reasons: ["MATCH_MEDIA"],
+      justification: "Read Aloud monitors the system color scheme to keep the toolbar icon legible.",
+    })
+      .finally(() => {
+        creatingOffscreenDocument = null
+      })
+  }
+  await creatingOffscreenDocument
+}
+
+async function hasOffscreenDocument() {
+  const offscreenUrl = brapi.runtime.getURL("offscreen.html")
+  if (brapi.runtime.getContexts) {
+    const contexts = await brapi.runtime.getContexts({
+      contextTypes: ["OFFSCREEN_DOCUMENT"],
+      documentUrls: [offscreenUrl],
+    })
+    return contexts.length > 0
+  }
+  if (typeof clients != "undefined" && clients.matchAll) {
+    const matchedClients = await clients.matchAll()
+    return matchedClients.some(client => client.url == offscreenUrl)
+  }
+  return false
+}
+
+async function sendToOffscreen(message) {
+  message.dest = "offscreen"
+  const result = await brapi.runtime.sendMessage(message)
+  if (result && result.error) throw result.error
+  else return result
+}
+
+if (brapi.storage && brapi.storage.local && brapi.storage.local.onChanged) {
+  brapi.storage.local.onChanged.addListener(function(changes, areaName) {
+    if (areaName == "local" && changes.showHighlighting) {
+      updateActionPopupState().catch(console.error)
+    }
+  })
+}
+
 function installContextMenus() {
   if (brapi.contextMenus)
   brapi.contextMenus.create({
@@ -88,6 +189,13 @@ brapi.contextMenus.onClicked.addListener(function(info, tab) {
       })
       .catch(handleHeadlessError)
 })
+
+if (brapi.action && brapi.action.onClicked) {
+  brapi.action.onClicked.addListener(function(tab) {
+    handleActionClicked(tab)
+      .catch(handleHeadlessError)
+  })
+}
 
 
 /**
@@ -182,6 +290,7 @@ async function playText(text, opts) {
   const hasPlayer = await stop().then(res => res == true, err => false)
   if (!hasPlayer) await injectPlayer(await getActiveTab())
   await sendToPlayer({method: "playText", args: [text, opts]})
+  await updateActionPopupState({state: "PLAYING"})
 }
 
 async function playTab(tabId) {
@@ -208,6 +317,7 @@ async function playTab(tabId) {
   const hasPlayer = await stop().then(res => res == true, err => false)
   if (!hasPlayer) await injectPlayer(tab)
   await sendToPlayer({method: "playTab"})
+  await updateActionPopupState({state: "PLAYING"})
 }
 
 async function reloadAndPlayTab(tabId) {
@@ -234,17 +344,23 @@ async function reloadAndPlayTab(tabId) {
   await playTab(tab.id)
 }
 
-function stop() {
+async function stop() {
   currentTask.cancel()
-  return sendToPlayer({method: "stop"})
+  const result = await sendToPlayer({method: "stop"})
+  await updateActionPopupState({state: "STOPPED"})
+  return result
 }
 
-function pause() {
-  return sendToPlayer({method: "pause"})
+async function pause() {
+  const result = await sendToPlayer({method: "pause"})
+  await updateActionPopupState({state: "PAUSED"})
+  return result
 }
 
-function resume() {
-  return sendToPlayer({method: "resume"})
+async function resume() {
+  const result = await sendToPlayer({method: "resume"})
+  await updateActionPopupState({state: "PLAYING"})
+  return result
 }
 
 async function getPlaybackState() {
@@ -267,6 +383,24 @@ function rewind() {
 
 function seek(n) {
   return sendToPlayer({method: "seek", args: [n]})
+}
+
+async function updatePlaybackRate() {
+  try {
+    return await sendToPlayer({method: "updatePlaybackRate"})
+  }
+  catch (err) {
+    return true
+  }
+}
+
+async function handleActionClicked(tab) {
+  const settings = await getSettings(["showHighlighting"])
+  const showHighlighting = Number(settings.showHighlighting != null ? settings.showHighlighting : defaults.showHighlighting)
+  const stateInfo = await getPlaybackState()
+  if (showHighlighting == 3 && stateInfo.state == "STOPPED") {
+    await playTab(tab && tab.id)
+  }
 }
 
 

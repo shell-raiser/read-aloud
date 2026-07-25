@@ -131,6 +131,7 @@ function Doc(source, onEnd) {
   var info;
   var currentIndex;
   var activeSpeech;
+  var currentTexts;
   var ready = source.ready
     .then(function(result) {info = result})
   var foundText;
@@ -145,6 +146,7 @@ function Doc(source, onEnd) {
   this.forward = forward;
   this.rewind = rewind;
   this.seek = seek;
+  this.updatePlaybackRate = updatePlaybackRate;
 
   //method close
   function close() {
@@ -191,6 +193,7 @@ function Doc(source, onEnd) {
 
   async function read(texts, rewinded) {
     texts = texts.map(preprocess)
+    currentTexts = texts
     if (info.detectedLang == null) {
       const lang = await detectLanguage(texts)
       await wait(playbackState, "resumed")
@@ -199,7 +202,13 @@ function Doc(source, onEnd) {
     if (activeSpeech) return;
     activeSpeech = await getSpeech(texts);
     await wait(playbackState, "resumed")
-    activeSpeech.onEnd = function(err) {
+    bindSpeechLifecycle(activeSpeech)
+    if (rewinded) await activeSpeech.gotoEnd();
+    return activeSpeech.play();
+  }
+
+  function bindSpeechLifecycle(speech) {
+    speech.onEnd = function(err) {
       if (err) {
         if (onEnd) onEnd(err);
       }
@@ -212,8 +221,6 @@ function Doc(source, onEnd) {
           })
       }
     };
-    if (rewinded) await activeSpeech.gotoEnd();
-    return activeSpeech.play();
   }
 
   function preprocess(text) {
@@ -386,5 +393,24 @@ function Doc(source, onEnd) {
   function seek(n) {
     if (activeSpeech) return activeSpeech.seek(n);
     else return Promise.reject(new Error("Can't seek, not active"));
+  }
+
+  async function updatePlaybackRate() {
+    await ready
+    if (!activeSpeech || !currentTexts) return true
+
+    const position = activeSpeech.getInfo().position.index || 0
+    const state = await activeSpeech.getState()
+
+    activeSpeech.stop()
+    activeSpeech = null
+
+    activeSpeech = await getSpeech(currentTexts)
+    bindSpeechLifecycle(activeSpeech)
+
+    if (position > 0) activeSpeech.seek(position)
+    if (state == "PAUSED") activeSpeech.pause()
+    else await activeSpeech.play()
+    return true
   }
 }

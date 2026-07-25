@@ -160,6 +160,7 @@ var messageHandlers = {
   forward: forward,
   rewind: rewind,
   seek: seek,
+  updatePlaybackRate: updatePlaybackRate,
   close: closePlayer,
   shouldPlaySilence: shouldPlaySilence.bind({}),
   startPairing: () => phoneTtsEngine.startPairing(),
@@ -288,6 +289,8 @@ function openDoc(source, onEnd) {
   })
   idleSubject.next(false)
   lastUrlPromise = Promise.resolve(source.getUri())
+  bgPageInvoke("updateActionPopupState", [{state: "PLAYING"}])
+    .catch(console.error)
 }
 
 function closeDoc() {
@@ -295,6 +298,8 @@ function closeDoc() {
     activeDoc.close();
     activeDoc = null;
     idleSubject.next(true)
+    bgPageInvoke("updateActionPopupState", [{state: "STOPPED"}])
+      .catch(console.error)
   }
 }
 
@@ -311,6 +316,11 @@ function rewind() {
 function seek(n) {
   if (activeDoc) return activeDoc.seek(n);
   else return Promise.reject(new Error("Can't seek, not active"));
+}
+
+function updatePlaybackRate() {
+  if (activeDoc) return activeDoc.updatePlaybackRate()
+  else return Promise.resolve(true)
 }
 
 function closePlayer() {

@@ -91,6 +91,9 @@ body:not(.is-popup) #highlight {
 #toolbar .btn-group:nth-child(2) {
   margin-right: .25rem;
 }
+#toolbar .btn-group.rate-control {
+  margin-right: .25rem;
+}
 #toolbar .btn-group .btn:first-child {
   border-top-left-radius: .5rem;
   border-bottom-left-radius: .5rem;
@@ -121,6 +124,11 @@ body:not(.is-popup) #highlight {
 }
 #toolbar .material-icons {
   font-size: 1em;
+}
+#rate-value {
+  min-width: 3.9rem;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
 }
 .dark-mode #toolbar .btn {
   background-color: #3e3e3e;
